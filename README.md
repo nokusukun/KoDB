@@ -9,7 +9,7 @@ Grab the latest version in `dist` unpack and run...
 
 #### Using the DB
 
-To initalize or open a database it's as straightforward as calling the KoDB class.
+To initalize or open a database, it's as straightforward as calling the KoDB class.
 ```python
 db = kodb.KoDB("ko-test.db") # Safely loads the database.
 db = kodb.KoDB("ko-test.db", load_type="load") # Serializes all of the items in the database.

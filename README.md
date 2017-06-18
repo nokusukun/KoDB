@@ -23,7 +23,7 @@ data = 	{
 	    "title": "delectus aut autem",
 	    "completed": False
 	  	}
-db.store("todo\_1", data)	
+db.store("todo_1", data)	
 ```
 This stores the data with `todo_1` as the Document ID.
 
@@ -36,8 +36,8 @@ my_table.store("kampraaf", {"type": "wooden table", "price": {"value": 150, "cur
 #### Retrieval
 There are multiple ways of accessing data.
 ```python
-# returns the document with the todo\_1 id
-db.get("todo\_1")
+# returns the document with the todo_1 id
+db.get("todo_1")
 
 # returns documents that matches the lambda expression.
 my_table.query(lambda x: x.price["value"] > 500) 

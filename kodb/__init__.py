@@ -14,6 +14,10 @@ except:
     import json
     pass
 
+KEYS = []
+KEYS.extend(range(48, 57))
+KEYS.extend(range(65, 90))
+KEYS.extend(range(97, 122))
 
 
 class KoDB():
@@ -46,6 +50,7 @@ class KoDB():
         self.KO_NO_COMMIT = OPTIONS["no_commit"] if "no_commit" in OPTIONS else False
         self.KO_LOADTYPE = OPTIONS["load_type"] if "load_type" in OPTIONS else "safe_load"
         self.KO_DATA_SUFFIX = OPTIONS["data_suffix"] if "data_suffix" in OPTIONS else "default"
+        self.KO_LAST_CHUNK_SIZE = 0
 
         # Check if the database exists
         # Create if not
@@ -58,7 +63,7 @@ class KoDB():
             self.KO_META.append({self.KO_DATA_SUFFIX: {}})
             self.KO_CONFIG = {}
             self.ko_set_config("tables", [self.KO_DATA_SUFFIX])
-            metasize = 4096 if "meta_size" not in OPTIONS else (OPTIONS["meta_size"] * 4)
+            metasize = 1028 if "meta_size" not in OPTIONS else (OPTIONS["meta_size"])
             self.ko_set_config("metasize", metasize)
 
         else:
@@ -278,6 +283,11 @@ class KoDB():
         return None
 
 
+    def uid_generator(self):
+        def generate():
+            global KEYS
+            return "".join(random.choice(KEYS) for x in range(0, 8))
+
     def commit(self):
         """commit()
 
@@ -306,6 +316,16 @@ class KoDB():
             with open(file) as f:
                 self.KO_META.append(json.loads(f.read()))
 
+        chunk_size = 0
+        for x in self.KO_META[-1]:
+            for y in self.KO_META[-1][x]:
+                try:
+                    chunk_size += len(y)
+                except:
+                    pass
+
+        self.KO_LAST_CHUNK_SIZE = chunk_size
+
 
     def store_meta(self, fid, data, data_suffix = None):
         """INTERNAL FUNCTION"""
@@ -320,20 +340,14 @@ class KoDB():
                     return
 
         # Create a new chunk if the current chunk is full
-        # sprint(self.KO_META)
-        chunk_size = 0
-        for x in self.KO_META[-1]:
-            for y in self.KO_META[-1][x]:
-                try:
-                    chunk_size += len(y)
-                except:
-                    pass
-
+        # print(self.KO_META)
+        
         #print(chunk_size)
         #print(self.KO_META[-1].keys())
-        if chunk_size >= self.KO_CONFIG["metasize"]:
+        if self.KO_LAST_CHUNK_SIZE >= self.KO_CONFIG["metasize"]:
             #print("NEW META ADDED")
             self.KO_META.append({})
+            self.KO_LAST_CHUNK_SIZE = 0
 
         # IF the data is new, append to the last meta chunk
         if data_suffix not in self.KO_META[-1]:
@@ -343,6 +357,7 @@ class KoDB():
             self.KO_META[-1][data_suffix][fid] = []
 
         self.KO_META[-1][data_suffix][fid].insert(0, data)
+        self.KO_LAST_CHUNK_SIZE += 1
         self.KO_META_COMMIT_CACHE[len(self.KO_META) - 1] = True
         return
 

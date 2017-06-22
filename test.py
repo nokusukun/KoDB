@@ -4,15 +4,11 @@ import os
 import requests
 import cProfile
 import glob
+import shutil
 
 # remove existing files
 try:
-	for file in glob.glob("ko-test.db/**", recursive=True):
-		try:
-			os.remove("file")
-		except:
-			pass
-	os.rmdir("ko-test.db")
+	shutil.rmtree("ko-test.db")
 except:
 	pass
 
@@ -97,14 +93,25 @@ print("OK -  Search Test")
 # print(result)
 
 import time
-then = time.time()
-for x in range(0, 5000): test_table.store("{}".format(x), {"value": "The quick brown fox jumps over the lazy dog."})
-now = time.time()
-print("[KoDB] commit-on-store:\t\t\t {}".format(now-then))
+import matplotlib.pyplot as plt
+
+tarr = []
+thenx = time.time()
+for x in range(0, 5000):
+	then = time.time()
+	test_table.store("{}".format(x), {"value": "The quick brown fox jumps over the lazy dog."})
+	now = time.time()
+	tarr.append(now - then)
+nowx = time.time()
+plt.plot(tarr)
+plt.ylabel("Time (in seconds)")
+plt.xlabel("Operation [KoDB]")
+plt.show()
+print("[KoDB] commit-on-store:\t\t\t {}".format(nowx-thenx))
 
 then = time.time()
 db.KO_NO_COMMIT = True
-for x in range(5001, 10000): test_table.store("{}".format(x), {"value": "The quick brown fox jumps over the lazy dog."})
+for x in range(5000, 10000): test_table.store("{}".format(x), {"value": "The quick brown fox jumps over the lazy dog."})
 now = time.time()
 print("[KoDB] No commit-on-store:\t\t {}".format(now-then))
 db.commit()
@@ -131,13 +138,23 @@ except:
 from tinydb import TinyDB, Query
 db = TinyDB("tinyDB-test.json")
 User = Query()
-then = time.time()
-for x in range(0, 5000): db.insert({"id": x, "value": "The quick brown fox jumps over the lazy dog."})
-now = time.time()
-print("[TinyDB] Insert:\t\t\t {}".format(now-then))
+
+tarr = []
+thenx = time.time()
+for x in range(0, 5000):
+	then = time.time()
+	db.insert({"id": x, "value": "The quick brown fox jumps over the lazy dog."})
+	now = time.time()
+	tarr.append(now - then)
+nowx = time.time()
+plt.plot(tarr)
+plt.ylabel("Time (in seconds)")
+plt.xlabel("Operation [TinyDB]")
+plt.show()
+print("[TinyDB] Insert:\t\t\t {}".format(nowx-thenx))
 
 then = time.time()
-data = [{"id": x, "value": "The quick brown fox jumps over the lazy dog."} for x in range(5001, 10000)]
+data = [{"id": x, "value": "The quick brown fox jumps over the lazy dog."} for x in range(10001, 20000)]
 db.insert_multiple(data)
 now = time.time()
 print("[TinyDB] Multiple insert:\t\t {}".format(now-then))

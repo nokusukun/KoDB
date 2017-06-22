@@ -1,9 +1,19 @@
 # Ko-DB a zip and yaml based database
 # Author http://me.noku.space
 import zipfile
-import json
+import warnings
 import yaml
 import uuid
+import os
+import glob
+
+try:
+    import ujson as json
+    warnings.warn("KoDB is running on ujson.")
+except:
+    import json
+    pass
+
 
 
 class KoDB():
@@ -27,37 +37,50 @@ class KoDB():
                     > Specifies the default data suffix.
                         (this is the table seperator)
                 """
-        self.KO_FILENAME = file
+        
+        self.KO_FOLDER = file
+        self.KO_FILENAME = "{}.db".format(file)
+        self.KO_DB_FILEPATH = os.path.join(self.KO_FOLDER, self.KO_FILENAME)
+        self.KO_COMMIT_CACHE = []
+        self.KO_META_COMMIT_CACHE = {}
+        self.KO_NO_COMMIT = OPTIONS["no_commit"] if "no_commit" in OPTIONS else False
+        self.KO_LOADTYPE = OPTIONS["load_type"] if "load_type" in OPTIONS else "safe_load"
+        self.KO_DATA_SUFFIX = OPTIONS["data_suffix"] if "data_suffix" in OPTIONS else "default"
+
+        # Check if the database exists
+        # Create if not
+        # TODO: PUT ALL OF THE NEW_DB CODE HERE
+        self.KO_META = []
+        if not os.path.exists(self.KO_FOLDER):
+            # NEW DB 
+            os.mkdir(self.KO_FOLDER)
+            os.mkdir(os.path.join(self.KO_FOLDER, "meta"))
+            self.KO_META.append({self.KO_DATA_SUFFIX: {}})
+            self.KO_CONFIG = {}
+            self.ko_set_config("tables", [self.KO_DATA_SUFFIX])
+            metasize = 4096 if "meta_size" not in OPTIONS else (OPTIONS["meta_size"] * 4)
+            self.ko_set_config("metasize", metasize)
+
+        else:
+            # LOAD DB
+            self.init_meta()
+            config_path = os.path.join(self.KO_FOLDER, "{}.KO_CONFIG".format(self.KO_FOLDER))
+            with open(config_path) as f:
+                self.KO_CONFIG = yaml.load(f.read())
+
+        # Open Database File
         try:
-            self.KO_ZIP = zipfile.ZipFile(file, mode="a", allowZip64=True)
+            self.KO_ZIP = zipfile.ZipFile(self.KO_DB_FILEPATH, mode="a", allowZip64=True)
         except:
-            self.KO_ZIP = zipfile.ZipFile(file, mode="x", allowZip64=True)
+            self.KO_ZIP = zipfile.ZipFile(self.KO_DB_FILEPATH, mode="x", allowZip64=True)
 
         self.KO_INDEX = {}
         if "load_to_memory" in OPTIONS:
             if OPTIONS["load_to_memory"]:
                 self.load_all_to_memory()
 
-        self.KO_NO_COMMIT = OPTIONS["no_commit"] if "no_commit" in OPTIONS else False
-
-
-        self.KO_LOADTYPE = OPTIONS["load_type"] if "load_type" in OPTIONS else "safe_load"
-        self.KO_DATA_SUFFIX = OPTIONS["data_suffix"] if "data_suffix" in OPTIONS else "default"
         # data_suffix = self.KO_DATA_SUFFIX if data_suffix is None else data_suffix
         # sets the function to the default table if none is specified
-        
-        try:
-            with open("{}.KO_META".format(file)) as f:
-                self.KO_META = json.loads(f.read())
-        except:
-            self.KO_META = {}
-
-        try:
-            with open("{}.KO_CONFIG".format(file)) as f:
-                self.KO_CONFIG = yaml.load(f.read())
-        except:
-            self.KO_CONFIG = {}
-            self.ko_set_config("tables", [self.KO_DATA_SUFFIX])
 
 
     def close(self):
@@ -86,7 +109,8 @@ class KoDB():
     def ko_set_config(self, config_name, value):
         self.KO_CONFIG[config_name] = value
         # The zipfile will throw a bloody warning.
-        with open("{}.KO_CONFIG".format(self.KO_FILENAME), "w") as f:
+        config_path = os.path.join(self.KO_FOLDER, "{}.KO_CONFIG".format(self.KO_FOLDER))
+        with open(config_path, "w") as f:
             f.write(yaml.dump(self.KO_CONFIG))
 
 
@@ -143,7 +167,8 @@ class KoDB():
                                 by the KO_Table Object.***)"""
         try:
             data_suffix = self.KO_DATA_SUFFIX if data_suffix is None else data_suffix
-            if fid in self.KO_META[data_suffix]:
+            # if fid in self.KO_META[data_suffix]:
+            if self.get_meta(fid, data_suffix) is not None:
                 return True
             else:
                 return False
@@ -185,46 +210,38 @@ class KoDB():
                         (Stores on the default database if unspecified)
                         (***NOTE: This option is usually handled 
                                 by the KO_Table Object.***)"""
-        try:
-            data_suffix = self.KO_DATA_SUFFIX if data_suffix is None else data_suffix
-            if data_suffix not in self.KO_META:
-                self.KO_META[data_suffix] = {}
+        # try:
+        data_suffix = self.KO_DATA_SUFFIX if data_suffix is None else data_suffix
+        # if data_suffix not in self.KO_META:
+        #     self.KO_META[data_suffix] = {}
 
-            uid = str(uuid.uuid4())
-            if pid in self.KO_META[data_suffix]:
-                self.KO_META[data_suffix][pid].insert(0, uid)
-            else:
-                self.KO_META[data_suffix][pid] = [uid]
+        uid = str(uuid.uuid4())
+        # if pid in self.KO_META[data_suffix]:
+        #     self.KO_META[data_suffix][pid].insert(0, uid)
+        # else:
+        #     self.KO_META[data_suffix][pid] = [uid]
 
-            # Write Data to the database file
-            self.KO_ZIP.writestr("{}.{}".format(uid, data_suffix), yaml.dump(dict(data)))
+        self.store_meta(pid, uid, data_suffix)
 
-            # Write Metadata to the Meta file
-            if not self.KO_NO_COMMIT:
-                self.commit()
+        # Store Data to the commit cache
+        self.KO_COMMIT_CACHE.insert(0, (uid, data_suffix, data))
+        
+        # Write Metadata and push the uncommited changes to the Meta file
+        if not self.KO_NO_COMMIT:
+            self.commit()
 
-            # Initalizes table index if it's empty
-            if data_suffix not in self.KO_INDEX:
-                self.KO_INDEX[data_suffix] = {}
+        # Initalizes table index if it's empty
+        if data_suffix not in self.KO_INDEX:
+            self.KO_INDEX[data_suffix] = {}
 
-            # Stores index entry
-            self.KO_INDEX[data_suffix][pid] = data
-            return True
+        # Stores index entry
+        self.KO_INDEX[data_suffix][pid] = data
+        return True
 
-        except Exception as e:
-            print(e)
-            print("Data save failed.({})".format(pid))
-            return False
-
-
-    def commit(self):
-        """commit()
-
-            Commits the database to the file.
-            Note: Doesn't need to be called if the no_commit option 
-                    is set to True."""
-        with open("{}.KO_META".format(self.KO_FILENAME), "w") as f:
-            f.write(json.dumps(self.KO_META))
+        # except Exception as e:
+        #     print(e)
+        #     print("Data save failed.({})".format(pid))
+        #     return False
 
 
     def get(self, fid, data_suffix = None):
@@ -245,15 +262,100 @@ class KoDB():
                 self.KO_INDEX[data_suffix] = {}
 
             if fid in self.KO_INDEX[data_suffix]:
-                return Map(self.KO_INDEX[data_suffix][fid])
+                r = Map(self.KO_INDEX[data_suffix][fid])
+                r["_id"] = fid
+                return r
 
-            uid = self.KO_META[data_suffix][fid][0]
+            # uid = self.KO_META[data_suffix][fid][0]
+            uid = self.get_meta(fid, data_suffix)[0]
+            # print("UID: {}".format(uid))
 
             data = getattr(yaml, self.KO_LOADTYPE)(self.KO_ZIP.read("{}.{}".format(uid, data_suffix)).decode("utf-8"))
             self.KO_INDEX[data_suffix][fid] = data # Add it to the memory
             data["_id"] = fid # Attach ID on the object
             return Map(data)
            
+        return None
+
+
+    def commit(self):
+        """commit()
+
+            Commits the database to the file.
+            Note: Doesn't need to be called if the no_commit option 
+                    is set to True."""
+        for item in self.KO_COMMIT_CACHE:
+            self.KO_ZIP.writestr("{}.{}".format(item[0], item[1]), yaml.dump(dict(item[2])))
+
+        # with open("{}.KO_META".format(self.KO_FILENAME), "w") as f:
+        #     f.write(json.dumps(self.KO_META))
+
+        for meta_chunk in range(0, len(self.KO_META)):
+            if meta_chunk in self.KO_META_COMMIT_CACHE:
+                chunk_filename = "{:08d}.meta".format(meta_chunk)
+                with open(os.path.join(self.KO_FOLDER, "meta", chunk_filename), "w") as f:
+                    f.write(json.dumps(self.KO_META[meta_chunk]))
+
+        self.KO_COMMIT_CACHE.clear()
+        self.KO_META_COMMIT_CACHE.clear()
+
+
+    def init_meta(self):
+        meta_filemask = os.path.join(self.KO_FOLDER, "meta", "*.meta")
+        for file in glob.glob(meta_filemask):
+            with open(file) as f:
+                self.KO_META.append(json.loads(f.read()))
+
+
+    def store_meta(self, fid, data, data_suffix = None):
+        """INTERNAL FUNCTION"""
+        data_suffix = self.KO_DATA_SUFFIX if data_suffix is None else data_suffix
+
+        for meta_chunk in range(0, len(self.KO_META)):
+            if data_suffix in self.KO_META:
+                if fid in self.KO_META[meta_chunk][data_suffix]:
+                    self.KO_META[meta_chunk][data_suffix][fid].insert(0, data)
+                    # Set this chunk to save on commit
+                    self.KO_META_COMMIT_CACHE[meta_chunk] = True
+                    return
+
+        # Create a new chunk if the current chunk is full
+        # sprint(self.KO_META)
+        chunk_size = 0
+        for x in self.KO_META[-1]:
+            for y in self.KO_META[-1][x]:
+                try:
+                    chunk_size += len(y)
+                except:
+                    pass
+
+        #print(chunk_size)
+        #print(self.KO_META[-1].keys())
+        if chunk_size >= self.KO_CONFIG["metasize"]:
+            #print("NEW META ADDED")
+            self.KO_META.append({})
+
+        # IF the data is new, append to the last meta chunk
+        if data_suffix not in self.KO_META[-1]:
+            self.KO_META[-1][data_suffix] = {}
+
+        if fid not in self.KO_META[-1][data_suffix]:
+            self.KO_META[-1][data_suffix][fid] = []
+
+        self.KO_META[-1][data_suffix][fid].insert(0, data)
+        self.KO_META_COMMIT_CACHE[len(self.KO_META) - 1] = True
+        return
+
+
+    def get_meta(self, fid, data_suffix = None):
+        """INTERNAL FUNCTION"""
+        data_suffix = self.KO_DATA_SUFFIX if data_suffix is None else data_suffix
+        for meta_chunk in range(len(self.KO_META) - 1, -1, -1):
+            # print(meta_chunk)
+            if data_suffix in self.KO_META[meta_chunk]:
+                if fid in self.KO_META[meta_chunk][data_suffix]:
+                    return self.KO_META[meta_chunk][data_suffix][fid]
+
         return None
 
 
@@ -268,7 +370,10 @@ class KoDB():
                         (***NOTE: This option is usually handled 
                                 by the KO_Table Object.***)"""
         data_filter = data_suffix if data_suffix is not None else self.KO_DATA_SUFFIX
-        return self.KO_META[data_filter].keys()
+        meta = []
+        for meta_chunk in self.KO_META:
+            meta.extend(meta_chunk[data_filter].keys())
+        return meta
 
 
     def tables(self):

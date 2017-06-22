@@ -2,13 +2,17 @@
 import kodb
 import os
 import requests
-
+import cProfile
+import glob
 
 # remove existing files
 try:
-	os.remove("ko-test.db")
-	os.remove("ko-test.db.KO_CONFIG")
-	os.remove("ko-test.db.KO_META")
+	for file in glob.glob("ko-test.db/**", recursive=True):
+		try:
+			os.remove("file")
+		except:
+			pass
+	os.rmdir("ko-test.db")
 except:
 	pass
 
@@ -94,13 +98,54 @@ print("OK -  Search Test")
 
 import time
 then = time.time()
-for x in range(0, 1000): test_table.store("{}".format(x), {"value": "The quick brown fox jumps over the lazy dog."})
+for x in range(0, 5000): test_table.store("{}".format(x), {"value": "The quick brown fox jumps over the lazy dog."})
 now = time.time()
-print("Time Taken for commit-on-store: {}".format(now-then))
+print("[KoDB] commit-on-store:\t\t\t {}".format(now-then))
 
 then = time.time()
 db.KO_NO_COMMIT = True
-for x in range(0, 1000): test_table.store("{}".format(x), {"value": "The quick brown fox jumps over the lazy dog."})
-db.commit()
+for x in range(5001, 10000): test_table.store("{}".format(x), {"value": "The quick brown fox jumps over the lazy dog."})
 now = time.time()
-print("Time Taken for not-commit-on-store: {}".format(now-then))
+print("[KoDB] No commit-on-store:\t\t {}".format(now-then))
+db.commit()
+
+then = time.time()
+db.KO_NO_COMMIT = True
+x = []
+for item in test_table.get_all(): x.append(item)
+now = time.time()
+print("[KoDB] Entire Database traversal:\t {}".format(now-then))
+
+db.KO_NO_COMMIT = False
+
+def test():
+	for x in range(0, 10000): test_table.store("{}".format(x), {"value": "The quick brown fox jumps over the lazy dog."})
+
+# cProfile.run("test()")
+
+try:
+	os.remove("tinyDB-test.json")
+except:
+	pass
+
+from tinydb import TinyDB, Query
+db = TinyDB("tinyDB-test.json")
+User = Query()
+then = time.time()
+for x in range(0, 5000): db.insert({"id": x, "value": "The quick brown fox jumps over the lazy dog."})
+now = time.time()
+print("[TinyDB] Insert:\t\t\t {}".format(now-then))
+
+then = time.time()
+data = [{"id": x, "value": "The quick brown fox jumps over the lazy dog."} for x in range(5001, 10000)]
+db.insert_multiple(data)
+now = time.time()
+print("[TinyDB] Multiple insert:\t\t {}".format(now-then))
+
+
+then = time.time()
+db.KO_NO_COMMIT = True
+x = []
+for item in db.all(): x.append(item)
+now = time.time()
+print("[TinyDB] Entire Database traversal:\t {}".format(now-then))

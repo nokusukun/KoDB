@@ -12,7 +12,8 @@ Grab the latest version in `dist` unpack and run...
 To initalize or open a database, it's as straightforward as calling the KoDB class.
 ```python
 db = kodb.KoDB("ko-test.db") # Safely loads the database. (load_type="safe_load")
-db = kodb.KoDB("ko-test.db", load_type="load") # Serializes all of the items in the database.
+db = kodb.KoDB("ko-test.db", load_type="load") # Serializes all of the objects in the database.
+NOTE: Ko-DB will raise an exception if the document loaded contains unsafe objects.
 ```
 The Database can be used as is since the database object is the default table.
 By adding the `load_type="load"` option, this allows KoDB to load and store serialized python objects.
